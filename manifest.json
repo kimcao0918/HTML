@@ -1,0 +1,32 @@
+{
+  "name": "门窗助手 - 下料算料助手",
+  "short_name": "门窗助手",
+  "description": "门窗下料计算器：4块 / 3块 / 双扇 / 阳台 / 断桥门",
+  "start_url": "./MC.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f0f2f5",
+  "theme_color": "#2F80ED",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "./icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
