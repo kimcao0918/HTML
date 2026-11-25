@@ -252,6 +252,19 @@
 // 门扇门板数量：单门 1 块（原来写死 ×2，单门也显示 2 块）
 // 双门 / 四门仍为 2 块
 // ============================================================
+// v8.0  新增「子母门」（大改动）
+//
+// 进入方式：「双门」按钮单击在 双门 ↔ 子母门 之间切换
+// 计算口径：
+//   门洞宽 = 门框宽 - 100
+//   母扇宽 = 输入框填写
+//   子扇宽 = 门洞宽 - 母扇宽
+//   玻璃宽 = 扇宽 - 65 - 65 - 10（与双门同口径，不加 12）
+//   门扇门板宽 同玻璃宽口径
+//
+// 样例：门框 1280 → 门洞 1180 → 母扇 792 / 子扇 388
+//       母扇玻璃 652，子扇玻璃 248
+//
 // v7.7  修正单门门扇宽度（影响下料）
 //
 // 单门门扇宽 = 门洞宽 + 12（搭接量），此前漏了这个 +12
@@ -683,6 +696,93 @@
   // 获取门板高度
   // ============================================================
 
+  // ============================================================
+  // 子母门：母扇宽
+  //   输入框为空 → 按门洞宽的 67% 给一个合理默认
+  //   之后子扇宽 = 门洞宽 - 母扇宽
+  // ============================================================
+
+  // ============================================================
+  // 子母门：母扇宽输入框（放在门板高度下方，只有子母门显示）
+  // ============================================================
+
+  function ensureMotherLeafInput() {
+    const panelBox = getEl("doorPanelHBox");
+
+    if (!panelBox) {
+      return null;
+    }
+
+    let box = getEl("motherLeafBox");
+
+    if (box) {
+      const input = getEl("motherLeafW");
+
+      if (input) {
+        bindDoorInputClear(input, 0);
+      }
+
+      return box;
+    }
+
+    box = document.createElement("div");
+
+    box.className = "input-box hidden";
+
+    box.id = "motherLeafBox";
+
+    box.innerHTML = `
+            <label>母扇宽</label>
+
+            <input type="number"
+                id="motherLeafW"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                autocomplete="off"
+                min="1"
+                step="1"
+                placeholder="母扇宽">
+        `;
+
+    panelBox.insertAdjacentElement("afterend", box);
+
+    const input = getEl("motherLeafW");
+
+    if (input) {
+      bindDoorInputClear(input, 0);
+
+      input.addEventListener("input", function () {
+        if (String(this.value).trim() !== "") {
+          this.value = this.value.replace(/[^0-9]/g, "");
+        }
+
+        if (typeof calc === "function") {
+          calc();
+        }
+      });
+    }
+
+    return box;
+  }
+
+  function getMotherLeafW() {
+    const input = getEl("motherLeafW");
+
+    if (!input) {
+      return 0;
+    }
+
+    const raw = String(input.value).trim();
+
+    if (raw === "") {
+      return 0;
+    }
+
+    const v = Number(raw);
+
+    return Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
+  }
+
   function getDoorPanelH() {
     const input = getEl("doorPanelH");
 
@@ -806,6 +906,36 @@
   // ============================================================
   // 更新输入框显示
   // ============================================================
+
+  /* 母扇宽框只在子母门显示 */
+  function updateMotherLeafBox() {
+    const box = getEl("motherLeafBox");
+
+    if (!box) {
+      return;
+    }
+
+    const show = doorType === 3;
+
+    box.classList.toggle("hidden", !show);
+
+    if (!show) {
+      return;
+    }
+
+    /* 首次显示时，母扇宽为空就按门洞 67% 给个默认值 */
+    const input = getEl("motherLeafW");
+
+    if (input && String(input.value).trim() === "") {
+      const w = Number(getEl("winW") ? getEl("winW").value : 0);
+      const opening = w - 100;
+
+      if (opening > 0) {
+        input.value = Math.round(opening * 0.6712);
+      }
+    }
+  }
+
 
   function updateDoorInputs() {
     const mode = getEl("modeDropdown");
@@ -1609,7 +1739,15 @@
   // 更新门板尺寸
   // ============================================================
 
-  function updateDoorPanelResult(fixedPanelW, fixedPanelH, sashPanelW, sashPanelH, hasFixed) {
+  function updateDoorPanelResult(
+    fixedPanelW,
+    fixedPanelH,
+    sashPanelW,
+    sashPanelH,
+    hasFixed,
+    motherPanelW,
+    childPanelW,
+  ) {
     const row = ensureDoorPanelRow();
 
     if (!row) {
@@ -1650,7 +1788,17 @@
 
       const sashCount = doorType === 1 ? 1 : 2;
 
-      sashResult.innerHTML = `
+      if (doorType === 3) {
+        /* 子母门：母扇 / 子扇 各一行 */
+        sashResult.innerHTML = `
+                <span>母扇门板</span>
+                <strong>${roundValue(motherPanelW)} × ${roundValue(sashPanelH)} × 1</strong>
+                <br>
+                <span>子扇门板</span>
+                <strong>${roundValue(childPanelW)} × ${roundValue(sashPanelH)} × 1</strong>
+            `;
+      } else {
+        sashResult.innerHTML = `
                 <span>
                     ${doorType === 1 ? "门扇门板" : "双扇门板"}
                 </span>
@@ -1662,6 +1810,7 @@
                     × ${sashCount}
                 </strong>
             `;
+      }
     }
 
     updateDoorPanelDisplay();
@@ -1754,6 +1903,7 @@
   function calculateModeDoor() {
     ensureDoorPanelInput();
     ensureDoorBrightInput();
+    ensureMotherLeafInput();
     initDoorDefaults();
     updateDoorInputs();
 
@@ -1773,6 +1923,15 @@
     const brightH = getDoorBrightH();
 
     const panelH = getDoorPanelH();
+
+    /*
+     * 子母门（doorType===3）：
+     *   输入「母扇宽」，子扇宽 = 门洞宽 - 母扇宽
+     *   玻璃宽 = 扇宽 - 65 - 65 - 10（与双门同口径，不加 12）
+     */
+
+    updateMotherLeafBox();
+    const motherLeafW = getMotherLeafW();
 
     /*
      * 断桥门类型（v5.0）
@@ -1885,7 +2044,24 @@
      *   单门：（门洞 + 12）- 65 - 65 - 10         （例 900  → 672）
      */
 
-    const doorGlassW = doorType === 1 ? singleLeafW - 65 - 65 - 10 : fanZoneW / 2 - 65 - 65 - 10;
+    /*
+   * 子母门：母扇 = 输入的母扇宽，子扇 = 门洞 - 母扇
+   * 门洞为 0 时不分，回退到双门各一半
+   */
+
+  const isMotherChild = doorType === 3;
+
+  const motherW =
+    isMotherChild && motherLeafW > 0 && motherLeafW < fanZoneW ? motherLeafW : fanZoneW / 2;
+
+  const childW = fanZoneW - motherW;
+
+  /* 扇玻璃宽：单门 +12，子母门分别按母/子扇宽，其余同双门 */
+  const motherGlassW = motherW - 65 - 65 - 10;
+  const childGlassW = childW - 65 - 65 - 10;
+
+  const doorGlassW =
+    doorType === 1 ? singleLeafW - 65 - 65 - 10 : fanZoneW / 2 - 65 - 65 - 10;
 
     const fixedGlassH = lowerHeight - 39 - panelH - 10;
 
@@ -1903,6 +2079,9 @@
      */
 
     const sashPanelW = doorType === 1 ? singleLeafW - 65 - 65 - 10 : fanZoneW / 2 - 65 - 65 - 10;
+
+  const motherPanelW = motherW - 65 - 65 - 10;
+  const childPanelW = childW - 65 - 65 - 10;
 
     const sashPanelH = panelH - 60 - 10;
 
@@ -1922,12 +2101,37 @@
      *   单门 1 块、双门 2 块、四门 2 块
      */
 
-    setResult(
-      "g4_size",
-      "g4_count",
-      `${roundValue(doorGlassW)} × ${roundValue(doorGlassH)}`,
-      doorType === 1 ? 1 : 2,
-    );
+    /*
+     * 子母门：g4 显示母扇玻璃，g5 显示子扇玻璃
+     * 其它门型：g4 显示门扇玻璃，g5 隐藏
+     */
+
+    if (isMotherChild) {
+      setResult(
+        "g4_size",
+        "g4_count",
+        `${roundValue(motherGlassW)} × ${roundValue(doorGlassH)}`,
+        1,
+      );
+
+      setResult(
+        "g5_size",
+        "g5_count",
+        `${roundValue(childGlassW)} × ${roundValue(doorGlassH)}`,
+        1,
+      );
+
+      showRow("rowLowerFan", true);
+    } else {
+      setResult(
+        "g4_size",
+        "g4_count",
+        `${roundValue(doorGlassW)} × ${roundValue(doorGlassH)}`,
+        doorType === 1 ? 1 : 2,
+      );
+
+      showRow("rowLowerFan", false);
+    }
 
     const label1 = getEl("label1");
 
@@ -1957,7 +2161,17 @@
     }
 
     if (label4) {
-      label4.textContent = doorType === 4 ? "双门玻璃" : doorType === 2 ? "门扇玻璃" : "门扇玻璃";
+      label4.textContent = isMotherChild
+        ? "母扇玻璃"
+        : doorType === 4
+          ? "双门玻璃"
+          : "门扇玻璃";
+
+      const label5 = getEl("label5");
+
+      if (label5 && isMotherChild) {
+        label5.textContent = "子扇玻璃";
+      }
     }
 
     /*
@@ -1975,13 +2189,22 @@
 
     showRow("rowG4", true);
 
-    showRow("rowLowerFan", false);
+    /* 子母门需要第二行显示子扇玻璃 */
+    showRow("rowLowerFan", doorType === 3);
 
     showRow("rowSash", false);
 
     showRow("rowScreen", false);
 
-    updateDoorPanelResult(fixedPanelW, fixedPanelH, sashPanelW, sashPanelH, hasFixed);
+    updateDoorPanelResult(
+      fixedPanelW,
+      fixedPanelH,
+      sashPanelW,
+      sashPanelH,
+      hasFixed,
+      motherPanelW,
+      childPanelW,
+    );
 
     const area = (W * H) / 1000000;
 
