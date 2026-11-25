@@ -2,7 +2,7 @@
  * 门窗助手核心公共模块
  * 这里不包含任何具体窗型的计算规则。
  *
- * 版本：v7.6
+ * 版本：v8.0
  * 修改内容见 README.md
  */
 
@@ -587,7 +587,9 @@ function addToList() {
   /* 断桥门：标题带上具体门型 */
 
   if (currentMode === "door") {
-    modeName = "断桥门-" + (doorType === 4 ? "四门" : doorType === 2 ? "双门" : "单门");
+    modeName =
+      "断桥门-" +
+      (doorType === 4 ? "四门" : doorType === 3 ? "子母门" : doorType === 2 ? "双门" : "单门");
   }
 
   const item = {
@@ -1720,7 +1722,7 @@ let currentSub = "4";
 /* 断桥门类型：4=四门（默认）2=双门 1=单门 */
 let doorType = (function () {
   const saved = parseInt(localStorage.getItem("mc_doorType"), 10);
-  return [1, 2, 4].includes(saved) ? saved : 4;
+  return [1, 2, 3, 4].includes(saved) ? saved : 4;
 })();
 
 /* 供 mode-door.js 读取 */
@@ -1773,7 +1775,17 @@ function updateKindButtons() {
   }
 
   document.querySelectorAll(".door-type-btn").forEach(function (b) {
-    b.classList.toggle("active", Number(b.dataset.door) === doorType);
+    const d = Number(b.dataset.door);
+
+    /* 子母门(3) 也点亮「双门」按钮 */
+    const match = d === doorType || (d === 2 && doorType === 3);
+
+    b.classList.toggle("active", match);
+
+    /* 双门按钮文字带当前变体提示 */
+    if (d === 2) {
+      b.textContent = doorType === 3 ? "子母门" : "双门";
+    }
   });
 
   document.querySelectorAll(".sub-mode-btn").forEach(function (b) {
@@ -2262,7 +2274,16 @@ window.addEventListener("load", function () {
 
   document.querySelectorAll(".door-type-btn").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      const t = Number(this.dataset.door);
+      let t = Number(this.dataset.door);
+
+      /*
+       * 「双门」按钮单击在 双门(2) ↔ 子母门(3) 之间切换，
+       * 与窗户的「3块」一致，不额外加按钮
+       */
+
+      if (t === 2 && (doorType === 2 || doorType === 3)) {
+        t = doorType === 2 ? 3 : 2;
+      }
 
       if (t === doorType) return;
 
@@ -2281,7 +2302,8 @@ window.addEventListener("load", function () {
        *   单门 900
        */
 
-      const defW = t === 4 ? 1970 : t === 2 ? 1200 : 900;
+      /* 子母门默认门框 1280（用户给的样例） */
+      const defW = t === 4 ? 1970 : t === 2 ? 1200 : t === 3 ? 1280 : 900;
 
       if ($("winW")) $("winW").value = defW;
 
@@ -2298,6 +2320,9 @@ window.addEventListener("load", function () {
        * 门型变了要刷新输入框标签
        * （四门叫「门宽空」，双门/单门叫「门扇宽」）
        */
+
+      /* 切到子母门时清空母扇宽，交给 updateMotherLeafBox 补默认值 */
+      if ($("motherLeafW")) $("motherLeafW").value = "";
 
       updateModeInputs();
 
